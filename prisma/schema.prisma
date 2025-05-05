@@ -1,0 +1,117 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../lib/generated/prisma"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// user with id as an integer name string email string image
+
+model User {
+  id            Int       @id @default(autoincrement())
+  username      String?
+  email         String    @unique
+  password      String?   // Hashed password for email auth users
+  authType      AuthType  @default(email)
+  clerkId       String?   // Optional link to Clerk ID if they use Google/Clerk
+  chats         Chat[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum AuthType {
+  email
+  clerk
+}
+
+model Chat {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model RecommendedMovie {
+  id          Int      @id @default(autoincrement())
+  messageId   Int      // The message where this recommendation was made
+  message     Message  @relation(fields: [messageId], references: [id])
+  movieId     Int      
+  movie       Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+}
+
+// Update the Message model to include the relationship
+model Message {
+  id                Int               @id @default(autoincrement())
+  chatId            Int
+  role              Role              // "user" or "assistant"
+  content           String
+  createdAt         DateTime          @default(now())
+  chat              Chat              @relation(fields: [chatId], references: [id])
+  recommendedMovies RecommendedMovie[]
+}
+
+enum Role {
+  user
+  assistant
+}
+
+model AuthToken{
+  id  Int @id @default(autoincrement())
+  token String
+}
+
+model TmdbGenres{
+  id Int @id @default(autoincrement())
+  tmdb_id Int?
+  name String?
+}
+// schema.prisma
+model Movie {
+  id            Int      @id @default(autoincrement())
+  tmdbId        Int      @unique       // TMDb's movie ID
+  title         String
+  overview      String?
+  releaseDate   DateTime?
+  posterPath    String?  // Partial URL from TMDb
+  trailerPath    String?  // Partial URL from TMDb
+  backdropPath  String?  // Optional background image
+  voteAverage   Float?
+  voteCount     Int?
+  genres        String[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  recommendations RecommendedMovie[]
+}
+
+
+
+
+
+// comes at a later date when we introduce deezer
+model Song {
+  id            Int      @id @default(autoincrement())
+  deezerId      Int      @unique       // Deezer's song ID
+  title         String
+  artist        String
+  album         String?
+  previewUrl    String?  // 30s preview MP3
+  duration      Int?     // In seconds
+  coverUrl      String?  // Album cover image
+  link          String?  // Deezer web link
+  genre         String?  // Deezer genre (broad)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

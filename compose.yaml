@@ -1,0 +1,34 @@
+# networks:
+#   app-network:
+#     driver: bridge
+services:
+  db:
+    container_name: node_db
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - 5432:5432
+    volumes:
+    - pgdata:/var/lib/postgresql/data
+
+  api:
+    container_name: api
+    image: api
+    build:
+      context: .
+      dockerfile: api.dockerfile
+    ports:
+      - 5000:5000
+      - 5555:5555
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@node_db:5432/postgres?schema=public
+    depends_on:
+      - db
+volumes:
+  pgdata: {}
