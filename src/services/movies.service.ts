@@ -22,7 +22,7 @@ const fetchGenres = async () => {
   }
 };
 
-const fetchMovieByGenre = async (genreId: number[]) => {
+const fetchMovieByGenre = async (genreId: number[], limit: number = 10) => {
   try {
     const res = await axios.get(`https://api.themoviedb.org/3/discover/movie`, {
       params: {
@@ -31,13 +31,13 @@ const fetchMovieByGenre = async (genreId: number[]) => {
         with_genres: genreId.join(", "),
       },
     });
-    return res.data.results;
+    return res.data.results.slice(0, Math.min(limit, 20));
   } catch (error) {
     console.log("error", error);
   }
 };
 
-const getGroqResponse = async (userMessage: string, mode = "recommend") => {
+const getGroqResponse = async (userMessage: string, mode = "recommend", stream = false) => {
   const genres: genre[] = await fetchGenres();
   const systemPrompt =
     mode === "chat"
@@ -63,17 +63,22 @@ Guidelines:
           { role: "user", content: userMessage },
         ],
         temperature: 0.7,
-        stream: false, // Changed to false to get a complete response
+        stream: stream, // Now controlled by parameter
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           "Content-Type": "application/json",
         },
+        responseType: stream ? 'stream' : 'json', // Set responseType based on stream parameter
       }
     );
 
-    // Check if response has the expected structure
+    if (stream) {
+      return res; // Return the stream directly
+    }
+
+    // Non-streaming response handling
     if (
       res.data &&
       res.data.choices &&

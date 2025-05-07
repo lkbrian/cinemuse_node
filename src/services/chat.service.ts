@@ -7,23 +7,40 @@ export const getChats = async () => await prisma.chat.findMany();
 export const getUserChats = async (id: number) =>
   await prisma.chat.findMany({
     where: { userId: id },
-  });
-
-export const getChatById = async (id: number) =>
-  await prisma.chat.findUnique({
-    where: { id },
     include: {
       messages: {
-        include: {
-          recommendedMovies: {
-            include: {
-              movie: true,
-            },
-          },
-        },
+        take: 1,
+        orderBy: { createdAt: "desc" },
       },
     },
   });
+
+export const getChatById = async (id: number, messageLimit: number = 50) =>
+  await prisma.chat.findUnique({
+    where: { id },
+  });
+
+export const getMessagesByChatId = async (
+  chatId: number,
+  limit: number = 50,
+  offset: number = 0
+) => {
+  return await prisma.message.findMany({
+    where: { chatId },
+    include: {
+      recommendedMovies: {
+        include: {
+          movie: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    skip: offset,
+    take: limit,
+  });
+};
 
 export const createOrGetChat = async ({
   chatId,

@@ -23,12 +23,28 @@ router.get("/users/getsingle", userController.getUser);
 //chats
 router.get("/chat/getuserchats", requireAuth, movieController.getUserChats);
 router.get("/chat/byid", requireAuth, movieController.getChatById);
+router.get("/chat/messages", requireAuth, movieController.getChatMessages);
+
 // ai recommended movies
-router.post("/groq/recommendation", movieController.handleGroqRecommendation);
+router.post(
+  "/groq/recommendation",
+  movieController.handleNoLoginRecommendandation
+);
+router.post(
+  "/groq/recommendation/stream",
+  movieController.handleStreamedResponseNoLogin
+);
 router.post(
   "/chat/movie/assitant",
   requireAuth,
   movieController.handleGroqRecommendation
+);
+
+// Streaming endpoint
+router.post(
+  "/chat/stream",
+  requireAuth,
+  movieController.handleStreamingResponse
 );
 
 // ai recommended songs
