@@ -9,6 +9,116 @@ import * as chatService from "../services/chat.service";
 /**
  * Handle streaming response from Groq API
  */
+const handleStreamedResponseNoLogin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const { message, mode } = req.body;
+  const limit = 3;
+  if (!message) {
+    res.status(400).json({ error: "User message is required." });
+    return;
+  }
+
+  try {
+    // Set headers for streaming
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const stream = await movieService.getGroqResponse(message, mode, true);
+    let fullResponse = "";
+
+    stream.data.on("data", (chunk: Buffer) => {
+      const chunkText = chunk.toString();
+
+      try {
+        const lines = chunkText
+          .split("\n")
+          .filter((line) => line.trim() !== "");
+
+        for (const line of lines) {
+          if (line === "data: [DONE]") continue;
+          const jsonStr = line.startsWith("data: ") ? line.slice(6) : line;
+          try {
+            const json = JSON.parse(jsonStr);
+            if (
+              json.choices &&
+              json.choices[0] &&
+              json.choices[0].delta &&
+              json.choices[0].delta.content
+            ) {
+              const content = json.choices[0].delta.content;
+              fullResponse += content;
+
+              res.write(`data: ${JSON.stringify({ content })}\n\n`);
+            }
+          } catch (e) {
+            console.error("Error parsing JSON from chunk:", jsonStr, e);
+          }
+        }
+      } catch (e) {
+        console.error("Error processing chunk:", e);
+      }
+    });
+
+    stream.data.on("end", async () => {
+      try {
+        if (mode === "recommend" && fullResponse) {
+          const genres: genre[] = await movieService.fetchGenres();
+
+          const matchedGenres = genres.filter((genre) =>
+            fullResponse.toLowerCase().includes(genre.name.toLowerCase())
+          );
+
+          if (matchedGenres.length) {
+            const genreIds = matchedGenres.map((g) => g.id);
+            const movies = await movieService.fetchMovieByGenre(
+              genreIds,
+              limit
+            );
+
+            res.write(
+              `data: ${JSON.stringify({
+                complete: true,
+                genres: matchedGenres.map((g) => g.name),
+                movies,
+              })}\n\n`
+            );
+          }
+        }
+
+        res.write(`data: ${JSON.stringify({ complete: true })}\n\n`);
+        res.end();
+      } catch (error) {
+        console.error("Error saving response:", error);
+        res.write(
+          `data: ${JSON.stringify({ error: "Error saving response" })}\n\n`
+        );
+        res.end();
+      }
+    });
+
+    stream.data.on("error", (err: Error) => {
+      console.error("Stream error:", err);
+      res.write(
+        `data: ${JSON.stringify({ error: "Stream error occurred" })}\n\n`
+      );
+      res.end();
+    });
+  } catch (error) {
+    console.error("Error setting up stream:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Error setting up stream" });
+    } else {
+      res.write(
+        `data: ${JSON.stringify({ error: "Error setting up stream" })}\n\n`
+      );
+      res.end();
+    }
+  }
+};
 const handleStreamingResponse = async (
   req: Request,
   res: Response,
@@ -137,106 +247,6 @@ const handleStreamingResponse = async (
       console.error("Stream error:", err);
       res.write(
         `data: ${JSON.stringify({ error: "Stream error occurred" })}\n\n`
-      );
-      res.end();
-    });
-  } catch (error) {
-    console.error("Error setting up stream:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Error setting up stream" });
-    } else {
-      res.write(
-        `data: ${JSON.stringify({ error: "Error setting up stream" })}\n\n`
-      );
-      res.end();
-    }
-  }
-};
-const handleStreamedResponseNoLogin = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  const limit = 3;
-  const { message, mode } = req.body;
-  if (!message) {
-    res.status(400).json({ error: "User message is required" });
-    return;
-  }
-  try {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    const stream = await movieService.getGroqResponse(message, mode, true);
-    let fullResponse = " ";
-    stream.data.on("data", (chunk: Buffer) => {
-      const chunckText = chunk.toString();
-      try {
-        const lines = chunckText
-          .split("\n")
-          .filter((line) => line.trim() !== "");
-        for (const line of lines) {
-          if (line === "data: [DONE]") continue;
-          const jsonString = line.startsWith("data: ") ? line.slice(6) : line;
-          try {
-            const json = JSON.parse(jsonString);
-            if (
-              json.choices &&
-              json.choices[0] &&
-              json.choices[0].delta &&
-              json.choices[0].delta.content
-            ) {
-              const content = json.choices[0].delta.content;
-              fullResponse += content;
-
-              res.write(`data: ${JSON.stringify({ content })}`);
-            }
-          } catch (error) {
-            console.error("Error parsing JSON from chunk:", jsonString, error);
-            next(error);
-          }
-        }
-      } catch (error) {
-        console.error("Error processing chunk", error);
-        next(error);
-      }
-    });
-    stream.data.on("end", async () => {
-      try {
-        if (mode === "recommend" && fullResponse) {
-          const genres: genre[] = await movieService.fetchGenres();
-          const matchedGenres = genres.filter((genre) =>
-            fullResponse.toLowerCase().includes(genre.name.toLowerCase())
-          );
-          if (matchedGenres.length) {
-            const genreIds = matchedGenres.map((g) => g.id);
-            const movies = movieService.fetchMovieByGenre(genreIds, limit);
-            res.write(
-              `data: ${JSON.stringify({
-                completed: true,
-                genres: matchedGenres.map((g) => g.name),
-                movies,
-              })}\n\n`
-            );
-          }
-        }
-        res.write(`data: ${JSON.stringify({ completed: true })}`);
-        res.end();
-      } catch (error) {
-        console.error("Error saving response:", error);
-        res.write(
-          `data: ${JSON.stringify({ error: "Error saving response" })}\n\n`
-        );
-        res.end();
-        next(error);
-      }
-    });
-
-    stream.data.om("error", (error: Error) => {
-      console.error("Error saving response:", error);
-      res.write(
-        `data: ${JSON.stringify({ error: "Error saving response" })}\n\n`
       );
       res.end();
     });
