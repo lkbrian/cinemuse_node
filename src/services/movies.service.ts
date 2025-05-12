@@ -1,9 +1,13 @@
 import { genre } from "./../utils/types";
 import axios from "axios";
 import { PrismaClient } from "@prisma/client";
+import { Groq } from "groq-sdk"; // Assuming you have a Groq API client
 require("dotenv").config();
 
 const prisma = new PrismaClient();
+const client = new Groq({
+  apiKey: process.env.GROQ_API_KEY, // This is the default and can be omitted
+});
 
 const fetchGenres = async () => {
   try {
@@ -37,7 +41,11 @@ const fetchMovieByGenre = async (genreId: number[], limit: number = 10) => {
   }
 };
 
-const getGroqResponse = async (userMessage: string, mode = "recommend", stream = false) => {
+const getGroqResponse = async (
+  userMessage: string,
+  mode = "recommend",
+  stream = false
+) => {
   const genres: genre[] = await fetchGenres();
   const systemPrompt =
     mode === "chat"
@@ -47,30 +55,37 @@ const getGroqResponse = async (userMessage: string, mode = "recommend", stream =
           .join(", ")}.
       
 Guidelines:
-1. Identify the user's mood.
-2. Suggest 1–2 genres that match the mood.
-3. Mention why those genres are a good fit.
-4. Keep the answer under 3 sentences.
-5. if a user suggests one mood give them one mood`;
+    1. Identify the user's mood based on their message.
+    2. Suggest 1-2 genres that match the mood.
+    3. Provide a brief explanation (1–2 sentences) for why the genres fit.
+    4. Keep the response under 6 sentences.
+    5. If only one mood is mentioned, suggest one genre. If multiple moods are mentioned, balance the genres.
+    6. Use a polite, positive, and empathetic tone.
+    7. Ask for clarification if the mood is unclear.
+    8. Be sensitive to various moods (happy, sad, adventurous, relaxed, etc.).
+    9. Offer realistic and specific genre suggestions.
+    10. Adapt to ambiguous contexts and refocus the user on mood-based requests.
+    11. Encourage the user to explore genres they may not have considered that could bring their mood back.
+    12. Provide a concise, focused recommendation, avoiding generic responses.`;
 
   try {
     const res = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        model: "gemma2-9b-it",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
         ],
         temperature: 0.7,
-        stream: stream, // Now controlled by parameter
+        stream: stream,
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           "Content-Type": "application/json",
         },
-        responseType: stream ? 'stream' : 'json', // Set responseType based on stream parameter
+        responseType: stream ? "stream" : "json",
       }
     );
 
